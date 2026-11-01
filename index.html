@@ -1,0 +1,290 @@
+<!doctype html>
+<!--
+  The Circle invite page (2026-11-01). The invite link
+  https://<project>.supabase.co/functions/v1/invite/<token> sends the phone here with ?t=<token>:
+  in-app browsers (Messenger, Instagram) do not follow a redirect to avelumi://, and Supabase
+  serves no HTML on its own address. A tap on "Open in Avelumi" opens avelumi://i/<token>
+  (app/i/[token].tsx). If that does nothing, the person copies the code and pastes it in the app
+  (Circle > "Got an invite link?"). Published to GitHub Pages: scripts/publish-invite-page.sh.
+  Keep the token rules the same as src/circle/inviteLink.ts.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Avelumi Circle invite</title>
+    <meta property="og:title" content="Join my Circle on Avelumi" />
+    <meta property="og:description" content="Kind words from friends, every day." />
+    <meta property="og:image" content="https://shnqs.github.io/avelumi-link/otter.png" />
+    <style>
+      :root {
+        --paper: #fbf8f3;
+        --ink: #3b3235;
+        --caption: #6e6268;
+        --plum: #735469;
+        --card-start: #f7e7e1;
+        --card-end: #efd6cc;
+        --line: rgba(59, 50, 53, 0.1);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #2a232a;
+          --ink: #f7f0f4;
+          --caption: #c9bcc4;
+          --plum: #ddbbd3;
+          --card-start: #47384a;
+          --card-end: #3a2e3c;
+          --line: rgba(247, 240, 244, 0.14);
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: var(--paper); color: var(--ink); }
+      body {
+        font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        padding: max(32px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom));
+      }
+      main { width: 100%; max-width: 420px; text-align: center; }
+      .card {
+        border-radius: 28px;
+        padding: 28px 22px 26px;
+        background: linear-gradient(160deg, var(--card-start), var(--card-end));
+        border: 1px solid var(--line);
+      }
+      img { width: 132px; height: 132px; display: block; margin: 0 auto 12px; }
+      h1 {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 26px;
+        line-height: 1.25;
+        font-weight: 600;
+        margin: 0 0 8px;
+      }
+      p { margin: 0; }
+      .lead { color: var(--caption); font-size: 16px; }
+      .open {
+        display: block;
+        margin: 22px 0 0;
+        padding: 16px 20px;
+        border-radius: 999px;
+        background: var(--plum);
+        color: var(--paper);
+        font-weight: 600;
+        font-size: 18px;
+        text-decoration: none;
+      }
+      .get { display: inline-block; margin-top: 14px; color: var(--plum); font-weight: 600; }
+      .help { margin-top: 28px; font-size: 15px; color: var(--caption); }
+      .code {
+        margin: 12px auto 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 10px 10px 18px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: var(--card-start);
+      }
+      .code span {
+        font: 600 18px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+        letter-spacing: 0.04em;
+        color: var(--ink);
+        user-select: all;
+        -webkit-user-select: all;
+        overflow-wrap: anywhere;
+        text-align: left;
+      }
+      .code button {
+        flex: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 16px;
+        background: var(--plum);
+        color: var(--paper);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .bad { margin-top: 18px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card">
+        <img src="otter.png" alt="" />
+        <h1 id="title">You are invited to a Circle</h1>
+        <p class="lead" id="lead">Circle is where friends send each other kind words on Avelumi.</p>
+        <a class="open" id="open" href="avelumi://">Open in Avelumi</a>
+        <a class="get" id="get" href="https://apps.apple.com/app/id6825411270">No app yet? Get Avelumi</a>
+      </div>
+      <div id="codeBox">
+        <p class="help" id="help">Button does nothing? Open Avelumi, go to Circle, tap “Got an invite link?” and paste this code:</p>
+        <div class="code">
+          <span id="code"></span>
+          <button type="button" id="copy">Copy</button>
+        </div>
+      </div>
+      <p class="help bad" id="bad" hidden>This invite link is not complete. Ask your friend to send it again.</p>
+    </main>
+    <script>
+      (function () {
+        // gotLink is the Circle screen's row in each language (src/i18n/locales/<code>/circle.json).
+        var TEXT = {
+          en: {
+            title: '{name} invited you to a Circle', titleAnon: 'You are invited to a Circle',
+            lead: 'Circle is where friends send each other kind words on Avelumi.',
+            open: 'Open in Avelumi', get: 'No app yet? Get Avelumi',
+            help: 'Button does nothing? Open Avelumi, go to Circle, tap “{gotLink}” and paste this code:',
+            gotLink: 'Got an invite link? Open it to join', copy: 'Copy', copied: 'Copied',
+            bad: 'This invite link is not complete. Ask your friend to send it again.'
+          },
+          de: {
+            title: '{name} hat dich in einen Kreis eingeladen', titleAnon: 'Du bist in einen Kreis eingeladen',
+            lead: 'Im Kreis schicken sich Freunde auf Avelumi liebe Worte.',
+            open: 'In Avelumi öffnen', get: 'Noch keine App? Avelumi laden',
+            help: 'Der Knopf tut nichts? Öffne Avelumi, geh zu Kreis, tippe auf „{gotLink}“ und füge diesen Code ein:',
+            gotLink: 'Einladungslink bekommen? Öffne ihn, um beizutreten', copy: 'Kopieren', copied: 'Kopiert',
+            bad: 'Dieser Einladungslink ist nicht vollständig. Bitte um einen neuen Link.'
+          },
+          fr: {
+            title: '{name} t’invite dans un Cercle', titleAnon: 'Tu es invité·e dans un Cercle',
+            lead: 'Dans le Cercle, des amis s’envoient des mots doux sur Avelumi.',
+            open: 'Ouvrir dans Avelumi', get: 'Pas encore l’app ? Télécharger Avelumi',
+            help: 'Le bouton ne fait rien ? Ouvre Avelumi, va dans Cercle, touche « {gotLink} » et colle ce code :',
+            gotLink: 'Tu as reçu un lien ? Ouvre-le pour rejoindre', copy: 'Copier', copied: 'Copié',
+            bad: 'Ce lien d’invitation est incomplet. Demande à ton ami de le renvoyer.'
+          },
+          es: {
+            title: '{name} te invitó a un Círculo', titleAnon: 'Te invitaron a un Círculo',
+            lead: 'En el Círculo, los amigos se envían palabras amables en Avelumi.',
+            open: 'Abrir en Avelumi', get: '¿Aún no tienes la app? Descarga Avelumi',
+            help: '¿El botón no hace nada? Abre Avelumi, ve a Círculo, toca «{gotLink}» y pega este código:',
+            gotLink: '¿Te llegó un enlace? Ábrelo para unirte', copy: 'Copiar', copied: 'Copiado',
+            bad: 'Este enlace de invitación está incompleto. Pide a tu amigo que te lo envíe otra vez.'
+          },
+          it: {
+            title: '{name} ti ha invitato in una Cerchia', titleAnon: 'Sei stato invitato in una Cerchia',
+            lead: 'Nella Cerchia gli amici si mandano parole gentili su Avelumi.',
+            open: 'Apri in Avelumi', get: 'Non hai ancora l’app? Scarica Avelumi',
+            help: 'Il pulsante non fa nulla? Apri Avelumi, vai in Cerchia, tocca «{gotLink}» e incolla questo codice:',
+            gotLink: 'Hai ricevuto un link? Aprilo per entrare', copy: 'Copia', copied: 'Copiato',
+            bad: 'Questo link di invito non è completo. Chiedi al tuo amico di inviarlo di nuovo.'
+          },
+          pt: {
+            title: '{name} convidou você para um Círculo', titleAnon: 'Você foi convidado para um Círculo',
+            lead: 'No Círculo, amigos enviam palavras gentis uns aos outros no Avelumi.',
+            open: 'Abrir no Avelumi', get: 'Ainda não tem o app? Baixe o Avelumi',
+            help: 'O botão não faz nada? Abra o Avelumi, vá em Círculo, toque em “{gotLink}” e cole este código:',
+            gotLink: 'Recebeu um link? Abra para entrar', copy: 'Copiar', copied: 'Copiado',
+            bad: 'Este link de convite está incompleto. Peça para seu amigo enviar de novo.'
+          },
+          pl: {
+            title: '{name} zaprasza cię do Kręgu', titleAnon: 'Masz zaproszenie do Kręgu',
+            lead: 'W Kręgu przyjaciele wysyłają sobie dobre słowa w Avelumi.',
+            open: 'Otwórz w Avelumi', get: 'Nie masz jeszcze aplikacji? Pobierz Avelumi',
+            help: 'Przycisk nic nie robi? Otwórz Avelumi, przejdź do Kręgu, stuknij „{gotLink}” i wklej ten kod:',
+            gotLink: 'Masz link z zaproszeniem? Otwórz go, aby dołączyć', copy: 'Kopiuj', copied: 'Skopiowano',
+            bad: 'Ten link z zaproszeniem jest niepełny. Poproś znajomego, aby wysłał go jeszcze raz.'
+          },
+          tr: {
+            title: '{name} seni bir Çembere davet etti', titleAnon: 'Bir Çembere davet edildin',
+            lead: 'Çemberde arkadaşlar Avelumi’de birbirine güzel sözler gönderir.',
+            open: 'Avelumi’de aç', get: 'Uygulama yok mu? Avelumi’yi indir',
+            help: 'Düğme bir şey yapmıyor mu? Avelumi’yi aç, Çembere git, “{gotLink}” satırına dokun ve bu kodu yapıştır:',
+            gotLink: 'Davet linki mi geldi? Katılmak için aç', copy: 'Kopyala', copied: 'Kopyalandı',
+            bad: 'Bu davet linki eksik. Arkadaşından tekrar göndermesini iste.'
+          },
+          ja: {
+            title: '{name}さんからサークルへの招待が届きました', titleAnon: 'サークルへの招待が届きました',
+            lead: 'サークルでは、Avelumi で友だち同士がやさしい言葉を送り合えます。',
+            open: 'Avelumi で開く', get: 'アプリをお持ちでない方は Avelumi を入手',
+            help: 'ボタンが反応しない場合は、Avelumi を開いてサークルへ進み、「{gotLink}」をタップしてこのコードを貼り付けてください：',
+            gotLink: '招待リンクが届きましたか？開いて参加', copy: 'コピー', copied: 'コピーしました',
+            bad: 'この招待リンクは不完全です。もう一度送ってもらってください。'
+          },
+          ko: {
+            title: '{name}님이 서클에 초대했어요', titleAnon: '서클 초대가 도착했어요',
+            lead: '서클에서는 Avelumi로 친구끼리 다정한 말을 주고받아요.',
+            open: 'Avelumi에서 열기', get: '앱이 없나요? Avelumi 받기',
+            help: '버튼이 반응하지 않나요? Avelumi를 열고 서클로 가서 “{gotLink}”를 누른 뒤 이 코드를 붙여 넣으세요:',
+            gotLink: '초대 링크를 받았나요? 열어서 참여하세요', copy: '복사', copied: '복사됨',
+            bad: '이 초대 링크는 완전하지 않아요. 친구에게 다시 보내 달라고 하세요.'
+          }
+        };
+
+        var langs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en']);
+        var lang = 'en';
+        for (var i = 0; i < langs.length; i++) {
+          var base = String(langs[i]).toLowerCase().split('-')[0];
+          if (TEXT[base]) { lang = base; break; }
+        }
+        var tx = TEXT[lang];
+        document.documentElement.lang = lang;
+
+        // The token: ?t=<token> (or #<token>). Same rules as src/circle/inviteLink.ts.
+        var params = new URLSearchParams(location.search);
+        var token = params.get('t') || location.hash.replace(/^#/, '');
+        token = /^[A-Za-z0-9-]{1,80}$/.test(token) ? token : '';
+        var last = token.split('-').pop() || '';
+        var code = null;
+        if (/^[A-Za-z0-9]{4,20}$/.test(last)) {
+          var letters = last.toUpperCase();
+          code = letters.length === 10
+            ? 'OTTER-' + letters.slice(0, 5) + '-' + letters.slice(5)
+            : 'OTTER-' + letters;
+        }
+        var parts = token.split('-');
+        var slug = parts.length > 1 ? parts[0] : '';
+        var name = /^[a-z0-9]{1,12}$/.test(slug) ? slug.charAt(0).toUpperCase() + slug.slice(1) : '';
+
+        function set(id, text) { document.getElementById(id).textContent = text; }
+        set('title', name ? tx.title.replace('{name}', name) : tx.titleAnon);
+        set('lead', tx.lead);
+        set('open', tx.open);
+        set('get', tx.get);
+        set('help', tx.help.replace('{gotLink}', tx.gotLink));
+        set('copy', tx.copy);
+        set('bad', tx.bad);
+
+        if (code === null) {
+          document.getElementById('open').hidden = true;
+          document.getElementById('codeBox').hidden = true;
+          document.getElementById('bad').hidden = false;
+          return;
+        }
+        document.getElementById('open').href = 'avelumi://i/' + token;
+        set('code', code);
+
+        document.getElementById('copy').addEventListener('click', function () {
+          var button = this;
+          function done() {
+            button.textContent = tx.copied;
+            setTimeout(function () { button.textContent = tx.copy; }, 2000);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(done, fallback);
+          } else {
+            fallback();
+          }
+          function fallback() {
+            var area = document.createElement('textarea');
+            area.value = code;
+            area.setAttribute('readonly', '');
+            area.style.position = 'fixed';
+            area.style.opacity = '0';
+            document.body.appendChild(area);
+            area.select();
+            area.setSelectionRange(0, code.length);
+            try { document.execCommand('copy'); done(); } catch (e) { /* the code stays selectable */ }
+            document.body.removeChild(area);
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
